@@ -34,6 +34,12 @@ def list_stores(db: Session = Depends(get_db)):
 
 @app.post("/stores", response_model=schemas.StoreResponse, status_code=status.HTTP_201_CREATED, tags=["Stores"])
 def add_store(store: schemas.StoreCreate, db: Session = Depends(get_db)):
+    existing = db.query(models.Store).filter(models.Store.name.ilike(store.name)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"A(z) '{store.name}' nevű bolt már létezik az adatbázisban!"
+        )
     return crud.create_store(db, store)
 
 # --- Termékek végpontjai ---
@@ -43,6 +49,12 @@ def list_products(db: Session = Depends(get_db)):
 
 @app.post("/products", response_model=schemas.ProductResponse, status_code=status.HTTP_201_CREATED, tags=["Products"])
 def add_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
+    existing = db.query(models.Product).filter(models.Product.default_name.ilike(product.default_name)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"A(z) '{product.default_name}' nevű termék már létezik az adatbázisban!"
+        )
     return crud.create_product(db, product)
 
 # --- Bolti árak rögzítése ---
