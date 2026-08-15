@@ -104,3 +104,7 @@ async def upload_receipt(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Hiba történt a blokk feldolgozása közben: {str(e)}"
         )
+
+@app.get("/receipts/history", response_model=List[schemas.ReceiptHistoryResponse], tags=["Receipts"])
+def get_history(db: Session = Depends(get_db)):
+    return crud.get_receipt_history(db)

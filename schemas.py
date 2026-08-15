@@ -86,3 +86,24 @@ class ReceiptProcessResponse(BaseModel):
     date: Optional[str]
     items_count: int
     items: List[ReceiptItemParsed]
+
+class ReceiptDetailItem(BaseModel):
+    id: int
+    product_name: str
+    quantity: float
+    unit_type: str
+    unit_price: float
+    total_price: float
+
+    class Config:
+        from_attributes = True
+
+class ReceiptHistoryResponse(BaseModel):
+    id: int
+    store_name: str
+    total_amount: float
+    created_at: datetime
+    items: List[ReceiptDetailItem]
+
+    class Config:
+        from_attributes = True
