@@ -213,3 +213,14 @@ def delete_receipt_endpoint(
     if not success:
         raise HTTPException(status_code=404, detail="A blokk nem található vagy nincs jogosultságod törölni.")
     return None
+
+@app.post("/cart/compare-all", response_model=schemas.MultiStoreEstimateResponse, tags=["Cart"])
+def compare_all_stores(request: schemas.CartEstimateRequest, db: Session = Depends(get_db)):
+    return crud.compare_all_stores_cart(db, request.items)
+
+@app.get("/receipts/analytics", response_model=schemas.MonthlySpendingStats, tags=["Receipts"])
+def get_analytics(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    return crud.get_spending_analytics(db, current_user.id)

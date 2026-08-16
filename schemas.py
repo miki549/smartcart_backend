@@ -163,3 +163,29 @@ class ReceiptUpdateRequest(BaseModel):
     total_amount: Optional[float] = None
     purchased_at: Optional[datetime] = None
     items: List[ReceiptItemUpdate]
+
+# --- Bolt-összehasonlítás sémák ---
+class StoreComparisonResult(BaseModel):
+    store_id: int
+    store_name: str
+    estimated_total: float
+    is_complete: bool  # Minden termék ára ismert-e
+    missing_items_count: int
+    price_difference_from_best: float = 0.0
+
+class MultiStoreEstimateResponse(BaseModel):
+    best_store_id: Optional[int] = None
+    best_store_name: Optional[str] = None
+    results: List[StoreComparisonResult]
+
+# --- Költési statisztika sémák ---
+class StoreSpendingBreakdown(BaseModel):
+    store_name: str
+    total_spent: float
+    percentage: float
+
+class MonthlySpendingStats(BaseModel):
+    current_month_name: str
+    current_month_total: float
+    total_receipts_count: int
+    store_breakdown: List[StoreSpendingBreakdown]
