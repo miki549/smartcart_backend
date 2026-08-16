@@ -9,12 +9,11 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Az aktuálisan elérhető és támogatott modellek
 AVAILABLE_MODELS = [
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
     "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3-flash-preview",
-    "gemini-3.7-flash"
+    "gemini-2.5-flash"
 ]
 
 def analyze_receipt_image(image_path: str) -> dict:
@@ -68,7 +67,6 @@ def analyze_receipt_image(image_path: str) -> dict:
 
         except Exception as e:
             last_error = e
-            # Ha elérhetetlen vagy túlterhelt, próbálja a következőt
             if any(err in str(e) for err in ["503", "404", "UNAVAILABLE", "NOT_FOUND", "high demand"]):
                 time.sleep(1)
                 continue
