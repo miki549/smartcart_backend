@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Feltöltések és debug képek mappáinak biztosítása
-RUN mkdir -p uploads debug_receipts
+RUN mkdir -p uploads
 
 EXPOSE 8000
 
