@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: smartcart-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smartcart_user
+      POSTGRES_PASSWORD: smartcart_password
+      POSTGRES_DB: smartcart
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartcart_user -d smartcart"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: smartcart-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://smartcart_user:smartcart_password@db:5432/smartcart
+    volumes:
+      - ./uploads:/app/uploads
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
