@@ -2,6 +2,9 @@ import os
 import json
 import time
 from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
+from typing import List
 from PIL import Image
 from dotenv import load_dotenv
 
@@ -10,15 +13,26 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 AVAILABLE_MODELS = [
-    "gemini-3.7-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-2.5-flash"
+    "gemini-3.7-flash"
 ]
+
+class ReceiptItem(BaseModel):
+    product_name: str = Field(description="Egyszerűsített, tiszta terméknév (pl. Trappista sajt, Tej 1.5%, Csirkemell)")
+    quantity: float = Field(description="Mennyiség")
+    unit_type: str = Field(description="Mértékegység (pl. db, kg)")
+    unit_price: float = Field(description="Egységár")
+    total_price: float = Field(description="Összesített ár az adott tételre")
+
+class ReceiptData(BaseModel):
+    store_name: str = Field(description="A bolt neve (pl. Lidl, Aldi, Penny, Spar, Tesco, Auchan)")
+    total_amount: float = Field(description="A fizetett végösszeg")
+    date: str = Field(description="Dátum YYYY-MM-DD formátumban")
+    items: List[ReceiptItem]
 
 def analyze_receipt_image(image_path: str) -> dict:
     """
-    Kép elemzése Gemini modellel.
+    Kép elemzése Gemini modellel strukturált JSON kimenettel.
     """
     if not GEMINI_API_KEY:
         raise ValueError("A GEMINI_API_KEY nincs beállítva a .env fájlban!")
@@ -26,25 +40,7 @@ def analyze_receipt_image(image_path: str) -> dict:
     client = genai.Client(api_key=GEMINI_API_KEY)
     img = Image.open(image_path)
 
-    prompt = """
-    Elemezd ezt a magyar bolti blokkot / nyugtát!
-    Kérlek, nyerd ki az alábbi adatokat szigorúan JSON formátumban:
-    {
-      "store_name": "A bolt neve (pl. Lidl, Aldi, Penny, Spar, Tesco, Auchan)",
-      "total_amount": 1234.0,
-      "date": "YYYY-MM-DD",
-      "items": [
-        {
-          "product_name": "Egyszerűsített, tiszta terméknév (pl. Trappista sajt, Tej 1.5%, Csirkemell)",
-          "quantity": 1.0,
-          "unit_type": "db",
-          "unit_price": 500.0,
-          "total_price": 500.0
-        }
-      ]
-    }
-    Fontos: Csak az érvényes JSON szöveget add vissza, markdown kódblokkok (```json) nélkül!
-    """
+    prompt = "Elemezd ezt a magyar bolti blokkot / nyugtát és nyerd ki az adatokat a megadott séma szerint!"
 
     last_error = None
 
@@ -53,17 +49,12 @@ def analyze_receipt_image(image_path: str) -> dict:
             response = client.models.generate_content(
                 model=model_name,
                 contents=[img, prompt],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ReceiptData,
+                ),
             )
-            
-            clean_text = response.text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.startswith("```"):
-                clean_text = clean_text[3:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-
-            return json.loads(clean_text.strip())
+            return json.loads(response.text)
 
         except Exception as e:
             last_error = e
