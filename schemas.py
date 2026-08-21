@@ -11,12 +11,18 @@ class UserLogin(BaseModel):
     username: str
     password: str
 
+# Alias a main.py-hoz
+UserAuthRequest = UserLogin
+
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
 
 class AccountDeleteRequest(BaseModel):
     password: str
+
+# Alias a main.py-hoz
+DeleteAccountRequest = AccountDeleteRequest
 
 class UserResponse(BaseModel):
     id: int
@@ -26,10 +32,13 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class TokenResponse(BaseModel):
+class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     username: str
+
+# Alias a korábbi kódokhoz
+TokenResponse = Token
 
 # --- Bolt sémák ---
 class StoreBase(BaseModel):
@@ -56,7 +65,6 @@ class ProductResponse(ProductBase):
 
     class Config:
         from_attributes = True
-
 
 class CatalogVersionResponse(BaseModel):
     version: str
@@ -169,7 +177,7 @@ class StoreComparisonResult(BaseModel):
     store_id: int
     store_name: str
     estimated_total: float
-    is_complete: bool  # Minden termék ára ismert-e
+    is_complete: bool
     missing_items_count: int
     price_difference_from_best: float = 0.0
 
