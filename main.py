@@ -38,9 +38,9 @@ def register(user_data: schemas.UserRegister, db: Session = Depends(get_db)):
     return crud.create_user(db, user_data)
 
 @app.post("/auth/login", response_model=schemas.Token)
-def login(login_data: schemas.UserAuthRequest, db: Session = Depends(get_db)):
-    user = auth.authenticate_user(db, login_data.username, login_data.password)
-    if not user:
+def login(login_data: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = crud.get_user_by_username(db, username=login_data.username)
+    if not user or not auth.verify_password(login_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Hibás felhasználónév vagy jelszó."
@@ -61,7 +61,7 @@ def change_password(
 
 @app.post("/auth/delete-account")
 def delete_account(
-    req: schemas.DeleteAccountRequest,
+    req: schemas.AccountDeleteRequest,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
