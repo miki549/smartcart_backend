@@ -6,7 +6,6 @@ import models
 import schemas
 import auth
 
-# Maximális blokk-életkor, ami még frissítheti az éles bolti árakat (napokban)
 MAX_PRICE_UPDATE_AGE_DAYS = 30
 
 def _get_utc_now() -> datetime.datetime:
@@ -44,11 +43,9 @@ def _parse_purchase_datetime(raw_value):
     return None
 
 def _validate_and_sanitize_date(parsed_date: datetime.datetime) -> datetime.datetime:
-    """Kiszűri a jövőbeli dátumokat és biztosítja a helyes időt."""
     now = _get_utc_now()
     if parsed_date is None:
         return now
-    # Ha a dátum a jövőbe mutat (AI hallucináció védelem max +1 nap toleranciával)
     if parsed_date > now + datetime.timedelta(days=1):
         return now
     return parsed_date
@@ -78,9 +75,8 @@ def delete_user(db: Session, user: models.User):
 
 # --- Boltok ---
 def get_stores(db: Session):
-    return db.query(models.Store).filter(
-        models.Store.prices.any() | models.Store.receipts.any()
-    ).all()
+    # Visszaadjuk az összes rögzített boltot
+    return db.query(models.Store).all()
 
 def create_store(db: Session, store: schemas.StoreCreate):
     db_store = models.Store(name=store.name)
@@ -131,12 +127,10 @@ def upsert_store_price(
     now = _get_utc_now()
     target_date = _validate_and_sanitize_date(effective_date)
 
-    # 1. SZABÁLY: Túl régi blokk (pl. 45 napnál öregebb) NE módosítsa a bolt aktuális árát
     age = now - target_date
     if age.days > MAX_PRICE_UPDATE_AGE_DAYS:
         return get_latest_price(db, store_id, product_id)
 
-    # 2. SZABÁLY: Ha van már ár, csak akkor írjuk felül, ha az új blokk dátuma frissebb
     existing_price = get_latest_price(db, store_id, product_id)
     if existing_price:
         if existing_price.last_updated is None or target_date >= existing_price.last_updated:
@@ -208,11 +202,10 @@ def calculate_cart(db: Session, request: schemas.CartEstimateRequest) -> schemas
         has_unknown_prices=has_unknown
     )
 
-# --- Blokk mentése (user_id-hoz rendelve) ---
+# --- Blokk mentése ---
 def save_processed_receipt(db: Session, user_id: int, parsed_data: dict, image_path: str):
-    store_name = parsed_data.get("store_name", "Egyéb bolt")
+    store_name = parsed_data.get("store_name", "Egyéb bolt").strip()
     
-    # 1. Bolt keresése / mentése
     store = db.query(models.Store).filter(models.Store.name.ilike(f"%{store_name}%")).first()
     if not store:
         store = models.Store(name=store_name)
@@ -220,7 +213,6 @@ def save_processed_receipt(db: Session, user_id: int, parsed_data: dict, image_p
         db.commit()
         db.refresh(store)
 
-    # 2. Blokk mentése
     parsed_purchase_time = _parse_purchase_datetime(parsed_data.get("date"))
     receipt = models.Receipt(
         user_id=user_id,
@@ -234,7 +226,6 @@ def save_processed_receipt(db: Session, user_id: int, parsed_data: dict, image_p
     db.commit()
     db.refresh(receipt)
 
-    # 3. Tételek és árak mentése
     price_effective_date = parsed_purchase_time or receipt.created_at
 
     for item in parsed_data.get("items", []):
@@ -297,22 +288,14 @@ def update_receipt(db: Session, user_id: int, receipt_id: int, req: schemas.Rece
     if not receipt:
         return None
 
-    old_store_id = receipt.store_id
     new_store_name = req.store_name.strip() if req.store_name else "Egyéb bolt"
 
     store = db.query(models.Store).filter(models.Store.name.ilike(new_store_name)).first()
     if not store:
-        old_store = db.query(models.Store).filter(models.Store.id == old_store_id).first()
-        if old_store and ("ismeretlen" in old_store.name.lower() or "egyéb" in old_store.name.lower()):
-            old_store.name = new_store_name
-            db.commit()
-            db.refresh(old_store)
-            store = old_store
-        else:
-            store = models.Store(name=new_store_name)
-            db.add(store)
-            db.commit()
-            db.refresh(store)
+        store = models.Store(name=new_store_name)
+        db.add(store)
+        db.commit()
+        db.refresh(store)
 
     receipt.store_id = store.id
 
@@ -369,12 +352,6 @@ def update_receipt(db: Session, user_id: int, receipt_id: int, req: schemas.Rece
 
     receipt.total_amount = req.total_amount if req.total_amount and req.total_amount > 0 else calculated_total
 
-    if old_store_id != store.id:
-        remaining = db.query(models.Receipt).filter(models.Receipt.store_id == old_store_id).count()
-        if remaining == 0:
-            db.query(models.StorePrice).filter(models.StorePrice.store_id == old_store_id).delete()
-            db.query(models.Store).filter(models.Store.id == old_store_id).delete()
-
     db.commit()
     db.refresh(receipt)
 
@@ -392,16 +369,9 @@ def delete_receipt(db: Session, user_id: int, receipt_id: int) -> bool:
     if not receipt:
         return False
 
-    store_id = receipt.store_id
+    # Csak magát a blokk entitást töröljük, a boltok, termékek és árak megmaradnak!
     db.delete(receipt)
     db.commit()
-
-    remaining = db.query(models.Receipt).filter(models.Receipt.store_id == store_id).count()
-    if remaining == 0:
-        db.query(models.StorePrice).filter(models.StorePrice.store_id == store_id).delete()
-        db.query(models.Store).filter(models.Store.id == store_id).delete()
-        db.commit()
-
     return True
 
 def compare_all_stores_cart(db: Session, items: List[schemas.CartItemRequest]) -> schemas.MultiStoreEstimateResponse:
@@ -429,7 +399,6 @@ def compare_all_stores_cart(db: Session, items: List[schemas.CartItemRequest]) -
             missing_items_count=missing_count
         ))
 
-    # A teljes és legolcsóbb boltok előre sorolása
     complete_results = [r for r in results if r.is_complete]
     best_store = None
 
@@ -440,7 +409,6 @@ def compare_all_stores_cart(db: Session, items: List[schemas.CartItemRequest]) -
             if r.is_complete:
                 r.price_difference_from_best = round(r.estimated_total - best_store.estimated_total, 2)
     
-    # Eredmények sorrendje: először a teljes árúak olcsóság szerint, majd a hiányosak
     results.sort(key=lambda x: (not x.is_complete, x.estimated_total))
 
     return schemas.MultiStoreEstimateResponse(
@@ -448,7 +416,6 @@ def compare_all_stores_cart(db: Session, items: List[schemas.CartItemRequest]) -
         best_store_name=best_store.store_name if best_store else None,
         results=results
     )
-
 
 def get_spending_analytics(db: Session, user_id: int) -> schemas.MonthlySpendingStats:
     now = _get_utc_now()
@@ -458,7 +425,6 @@ def get_spending_analytics(db: Session, user_id: int) -> schemas.MonthlySpending
     store_totals = {}
 
     for r in receipts:
-        # A vásárlás dátuma vagy a feltöltés dátuma
         dt = r.purchased_at or r.created_at or now
         if dt.year == now.year and dt.month == now.month:
             current_month_total += r.total_amount
